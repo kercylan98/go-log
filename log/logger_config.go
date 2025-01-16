@@ -2,8 +2,8 @@ package log
 
 import (
 	"github.com/fatih/color"
-	"github.com/kercylan98/go-log/src/internal/charproc"
-	"github.com/kercylan98/go-log/src/internal/options"
+	"github.com/kercylan98/go-log/log/internal/charproc"
+	"github.com/kercylan98/go-log/log/internal/options"
 	"io"
 	"os"
 	"sync"
@@ -101,14 +101,14 @@ func (o *configurationBuilder) Production() LoggerConfiguration {
 
 // LoggerConfigurator 是 LoggerConfiguration 的配置接口，它允许结构化的配置 Logger
 type LoggerConfigurator interface {
-	Configure(config LoggerConfiguration) Logger
+	Configure(config LoggerConfiguration)
 }
 
 // LoggerConfiguratorFn 是 LoggerConfiguration 的配置接口，它允许通过函数式的方式配置 Logger
-type LoggerConfiguratorFn func(config LoggerConfiguration) Logger
+type LoggerConfiguratorFn func(config LoggerConfiguration)
 
-func (f LoggerConfiguratorFn) Configure(config LoggerConfiguration) Logger {
-	return f(config)
+func (f LoggerConfiguratorFn) Configure(config LoggerConfiguration) {
+	f(config)
 }
 
 // LoggerConfiguration 是 Logger 的配置接口，它支持运行时进行配置变更，并且是并发安全的
@@ -122,48 +122,48 @@ type LoggerOptions interface {
 
 	// WithTrackBeautify 设置错误追踪美化是否启用
 	//   - 如果启用，那么当记录到 error 类型的日志时，将会得到易于阅读的错误追踪
-	WithTrackBeautify(enable bool) LoggerOptions
+	WithTrackBeautify(enable bool) LoggerConfiguration
 
 	// WithErrTrackLevel 设置错误追踪级别，只有在指定的级别下才会记录错误追踪
-	WithErrTrackLevel(levels ...Level) LoggerOptions
+	WithErrTrackLevel(levels ...Level) LoggerConfiguration
 
 	// WithMessageFormatter 设置消息格式化器
-	WithMessageFormatter(formatter MessageFormatter) LoggerOptions
+	WithMessageFormatter(formatter MessageFormatter) LoggerConfiguration
 
 	// WithCaller 设置是否显示调用者信息
 	//  - 如果启用，那么将会显示调用者信息
-	WithCaller(enable bool) LoggerOptions
+	WithCaller(enable bool) LoggerConfiguration
 
 	// WithCallerSkip 设置调用者跳过层数
 	//  - 调用者跳过层数表示在获取调用者信息时，跳过的层数
-	WithCallerSkip(skip int) LoggerOptions
+	WithCallerSkip(skip int) LoggerConfiguration
 
 	// WithCallerFormatter 设置调用者格式化器
-	WithCallerFormatter(formatter CallerFormatter) LoggerOptions
+	WithCallerFormatter(formatter CallerFormatter) LoggerConfiguration
 
 	// WithLevelStr 设置日志级别所使用的字符串
-	WithLevelStr(level Level, str string) LoggerOptions
+	WithLevelStr(level Level, str string) LoggerConfiguration
 
 	// WithDelimiter 设置分隔符
-	WithDelimiter(delimiter string) LoggerOptions
+	WithDelimiter(delimiter string) LoggerConfiguration
 
 	// WithAttrKey 设置属性键
-	WithAttrKey(key AttrKey, str string) LoggerOptions
+	WithAttrKey(key AttrKey, str string) LoggerConfiguration
 
 	// WithEnableColor 设置是否启用颜色
-	WithEnableColor(enable bool) LoggerOptions
+	WithEnableColor(enable bool) LoggerConfiguration
 
 	// WithColor 设置日志颜色
-	WithColor(colorType ColorType, attrs ...color.Attribute) LoggerOptions
+	WithColor(colorType ColorType, attrs ...color.Attribute) LoggerConfiguration
 
 	// WithTimeLayout 设置日志时间格式，如 "2006-01-02 15:04:05"
-	WithTimeLayout(layout string) LoggerOptions
+	WithTimeLayout(layout string) LoggerConfiguration
 
 	// WithLeveler 设置日志级别
-	WithLeveler(leveler Leveler) LoggerOptions
+	WithLeveler(leveler Leveler) LoggerConfiguration
 
 	// WithWriter 设置日志写入器
-	WithWriter(writer io.Writer) LoggerOptions
+	WithWriter(writer io.Writer) LoggerConfiguration
 }
 
 type LoggerOptionsFetcher interface {
@@ -232,7 +232,7 @@ type loggerConfiguration struct {
 	writer           io.Writer                  // 日志写入器
 }
 
-func (h *loggerConfiguration) WithWriter(writer io.Writer) LoggerOptions {
+func (h *loggerConfiguration) WithWriter(writer io.Writer) LoggerConfiguration {
 	return h.update(func(config *loggerConfiguration) {
 		config.writer = writer
 	})
@@ -367,13 +367,13 @@ func (h *loggerConfiguration) fetch(logger func(config *loggerConfiguration)) {
 	logger(h)
 }
 
-func (h *loggerConfiguration) WithTrackBeautify(enable bool) LoggerOptions {
+func (h *loggerConfiguration) WithTrackBeautify(enable bool) LoggerConfiguration {
 	return h.update(func(config *loggerConfiguration) {
 		config.trackBeautify = enable
 	})
 }
 
-func (h *loggerConfiguration) WithErrTrackLevel(levels ...Level) LoggerOptions {
+func (h *loggerConfiguration) WithErrTrackLevel(levels ...Level) LoggerConfiguration {
 	return h.update(func(config *loggerConfiguration) {
 		if config.errTrackLevel == nil {
 			config.errTrackLevel = make(map[Level]struct{})
@@ -384,31 +384,31 @@ func (h *loggerConfiguration) WithErrTrackLevel(levels ...Level) LoggerOptions {
 	})
 }
 
-func (h *loggerConfiguration) WithMessageFormatter(formatter MessageFormatter) LoggerOptions {
+func (h *loggerConfiguration) WithMessageFormatter(formatter MessageFormatter) LoggerConfiguration {
 	return h.update(func(config *loggerConfiguration) {
 		config.messageFormatter = formatter
 	})
 }
 
-func (h *loggerConfiguration) WithCaller(enable bool) LoggerOptions {
+func (h *loggerConfiguration) WithCaller(enable bool) LoggerConfiguration {
 	return h.update(func(config *loggerConfiguration) {
 		config.caller = enable
 	})
 }
 
-func (h *loggerConfiguration) WithCallerSkip(skip int) LoggerOptions {
+func (h *loggerConfiguration) WithCallerSkip(skip int) LoggerConfiguration {
 	return h.update(func(config *loggerConfiguration) {
 		config.callerSkip = skip
 	})
 }
 
-func (h *loggerConfiguration) WithCallerFormatter(formatter CallerFormatter) LoggerOptions {
+func (h *loggerConfiguration) WithCallerFormatter(formatter CallerFormatter) LoggerConfiguration {
 	return h.update(func(config *loggerConfiguration) {
 		config.callerFormatter = formatter
 	})
 }
 
-func (h *loggerConfiguration) WithLevelStr(level Level, str string) LoggerOptions {
+func (h *loggerConfiguration) WithLevelStr(level Level, str string) LoggerConfiguration {
 	return h.update(func(config *loggerConfiguration) {
 		if config.levelStr == nil {
 			config.levelStr = make(map[Level]string)
@@ -417,13 +417,13 @@ func (h *loggerConfiguration) WithLevelStr(level Level, str string) LoggerOption
 	})
 }
 
-func (h *loggerConfiguration) WithDelimiter(delimiter string) LoggerOptions {
+func (h *loggerConfiguration) WithDelimiter(delimiter string) LoggerConfiguration {
 	return h.update(func(config *loggerConfiguration) {
 		config.delimiter = delimiter
 	})
 }
 
-func (h *loggerConfiguration) WithAttrKey(key AttrKey, str string) LoggerOptions {
+func (h *loggerConfiguration) WithAttrKey(key AttrKey, str string) LoggerConfiguration {
 	return h.update(func(config *loggerConfiguration) {
 		if config.attrKeys == nil {
 			config.attrKeys = make(map[AttrKey]string)
@@ -432,13 +432,13 @@ func (h *loggerConfiguration) WithAttrKey(key AttrKey, str string) LoggerOptions
 	})
 }
 
-func (h *loggerConfiguration) WithEnableColor(enable bool) LoggerOptions {
+func (h *loggerConfiguration) WithEnableColor(enable bool) LoggerConfiguration {
 	return h.update(func(config *loggerConfiguration) {
 		config.enableColor = enable
 	})
 }
 
-func (h *loggerConfiguration) WithColor(colorType ColorType, attrs ...color.Attribute) LoggerOptions {
+func (h *loggerConfiguration) WithColor(colorType ColorType, attrs ...color.Attribute) LoggerConfiguration {
 	return h.update(func(config *loggerConfiguration) {
 		if config.colorTypes == nil {
 			config.colorTypes = make(map[ColorType]*color.Color)
@@ -449,13 +449,13 @@ func (h *loggerConfiguration) WithColor(colorType ColorType, attrs ...color.Attr
 	})
 }
 
-func (h *loggerConfiguration) WithTimeLayout(layout string) LoggerOptions {
+func (h *loggerConfiguration) WithTimeLayout(layout string) LoggerConfiguration {
 	return h.update(func(config *loggerConfiguration) {
 		config.timeLayout = layout
 	})
 }
 
-func (h *loggerConfiguration) WithLeveler(leveler Leveler) LoggerOptions {
+func (h *loggerConfiguration) WithLeveler(leveler Leveler) LoggerConfiguration {
 	return h.update(func(config *loggerConfiguration) {
 		config.leveler = leveler
 	})

@@ -1,7 +1,7 @@
 package convert_test
 
 import (
-	"github.com/kercylan98/go-log/src/internal/convert"
+	"github.com/kercylan98/go-log/log/internal/convert"
 	"testing"
 )
 

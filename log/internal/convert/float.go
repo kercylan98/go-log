@@ -1,7 +1,7 @@
 package convert
 
 import (
-	"github.com/kercylan98/go-log/src/internal/constraints"
+	"github.com/kercylan98/go-log/log/internal/constraints"
 	"strconv"
 )
 

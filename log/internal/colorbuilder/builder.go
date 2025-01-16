@@ -3,7 +3,7 @@ package colorbuilder
 import (
 	"fmt"
 	"github.com/fatih/color"
-	"github.com/kercylan98/go-log/src/internal/convert"
+	"github.com/kercylan98/go-log/log/internal/convert"
 	"strings"
 )
 
