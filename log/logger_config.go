@@ -238,11 +238,10 @@ func (h *loggerConfiguration) WithWriter(writer io.Writer) LoggerConfiguration {
 	})
 }
 
-func (h *loggerConfiguration) FetchWriter() (writer io.Writer) {
-	h.fetch(func(config *loggerConfiguration) {
-		writer = config.writer
-	})
-	return writer
+func (h *loggerConfiguration) FetchWriter() io.Writer {
+	h.rw.RLock()
+	defer h.rw.RUnlock()
+	return h.writer
 }
 
 func cloneMap[K comparable, V any](m map[K]V) map[K]V {
@@ -255,103 +254,104 @@ func cloneMap[K comparable, V any](m map[K]V) map[K]V {
 }
 
 func (h *loggerConfiguration) FetchCopy() (fetcher LoggerOptionsFetcher) {
-	h.fetch(func(config *loggerConfiguration) {
-		clone := *config
-		clone.rw = new(sync.RWMutex)
+	// Acquire a read lock to safely read the configuration
+	h.rw.RLock()
+	defer h.rw.RUnlock()
 
-		clone.colorTypes = cloneMap(config.colorTypes)
-		clone.attrKeys = cloneMap(config.attrKeys)
-		clone.levelStr = cloneMap(config.levelStr)
-		clone.errTrackLevel = cloneMap(config.errTrackLevel)
+	// Create a new configuration with the same values
+	clone := &loggerConfiguration{
+		rw:               new(sync.RWMutex),
+		leveler:          h.leveler,
+		timeLayout:       h.timeLayout,
+		colorTypes:       cloneMap(h.colorTypes),
+		enableColor:      h.enableColor,
+		attrKeys:         cloneMap(h.attrKeys),
+		delimiter:        h.delimiter,
+		levelStr:         cloneMap(h.levelStr),
+		caller:           h.caller,
+		callerSkip:       h.callerSkip,
+		callerFormatter:  h.callerFormatter,
+		messageFormatter: h.messageFormatter,
+		errTrackLevel:    cloneMap(h.errTrackLevel),
+		trackBeautify:    h.trackBeautify,
+		writer:           h.writer,
+	}
 
-		fetcher = &clone
-	})
-	return
-
+	return clone
 }
 
-func (h *loggerConfiguration) FetchLeveler() (leveler Leveler) {
-	h.fetch(func(config *loggerConfiguration) {
-		leveler = config.leveler
-	})
-	return
+func (h *loggerConfiguration) FetchLeveler() Leveler {
+	h.rw.RLock()
+	defer h.rw.RUnlock()
+	return h.leveler
 }
 
-func (h *loggerConfiguration) FetchTimeLayout() (layout string) {
-	h.fetch(func(config *loggerConfiguration) {
-		layout = config.timeLayout
-	})
-	return
+func (h *loggerConfiguration) FetchTimeLayout() string {
+	h.rw.RLock()
+	defer h.rw.RUnlock()
+	return h.timeLayout
 }
 
-func (h *loggerConfiguration) FetchEnableColor() (enable bool) {
-	h.fetch(func(config *loggerConfiguration) {
-		enable = config.enableColor
-	})
-	return
+func (h *loggerConfiguration) FetchEnableColor() bool {
+	h.rw.RLock()
+	defer h.rw.RUnlock()
+	return h.enableColor
 }
 
-func (h *loggerConfiguration) FetchLevelStr(level Level) (str string) {
-	h.fetch(func(config *loggerConfiguration) {
-		str = config.levelStr[level]
-	})
-	return
+func (h *loggerConfiguration) FetchLevelStr(level Level) string {
+	h.rw.RLock()
+	defer h.rw.RUnlock()
+	return h.levelStr[level]
 }
 
-func (h *loggerConfiguration) FetchCaller() (enable bool) {
-	h.fetch(func(config *loggerConfiguration) {
-		enable = config.caller
-	})
-	return
+func (h *loggerConfiguration) FetchCaller() bool {
+	h.rw.RLock()
+	defer h.rw.RUnlock()
+	return h.caller
 }
 
-func (h *loggerConfiguration) FetchCallerSkip() (skip int) {
-	h.fetch(func(config *loggerConfiguration) {
-		skip = config.callerSkip
-	})
-	return
+func (h *loggerConfiguration) FetchCallerSkip() int {
+	h.rw.RLock()
+	defer h.rw.RUnlock()
+	return h.callerSkip
 }
 
-func (h *loggerConfiguration) FetchCallerFormatter() (formatter CallerFormatter) {
-	h.fetch(func(config *loggerConfiguration) {
-		formatter = config.callerFormatter
-	})
-	return
+func (h *loggerConfiguration) FetchCallerFormatter() CallerFormatter {
+	h.rw.RLock()
+	defer h.rw.RUnlock()
+	return h.callerFormatter
 }
 
-func (h *loggerConfiguration) FetchColorType(colorType ColorType) (c *color.Color) {
-	h.fetch(func(config *loggerConfiguration) {
-		c = config.colorTypes[colorType]
-	})
-	return
+func (h *loggerConfiguration) FetchColorType(colorType ColorType) *color.Color {
+	h.rw.RLock()
+	defer h.rw.RUnlock()
+	return h.colorTypes[colorType]
 }
 
-func (h *loggerConfiguration) FetchMessageFormatter() (formatter MessageFormatter) {
-	h.fetch(func(config *loggerConfiguration) {
-		formatter = config.messageFormatter
-	})
-	return
+func (h *loggerConfiguration) FetchMessageFormatter() MessageFormatter {
+	h.rw.RLock()
+	defer h.rw.RUnlock()
+	return h.messageFormatter
 }
 
-func (h *loggerConfiguration) FetchErrTrackLevel(level Level) (exist bool) {
-	h.fetch(func(config *loggerConfiguration) {
-		_, exist = config.errTrackLevel[level]
-	})
-	return
+func (h *loggerConfiguration) FetchErrTrackLevel(level Level) bool {
+	h.rw.RLock()
+	defer h.rw.RUnlock()
+	_, exist := h.errTrackLevel[level]
+	return exist
 }
 
-func (h *loggerConfiguration) FetchDelimiter() (delimiter string) {
-	h.fetch(func(config *loggerConfiguration) {
-		delimiter = config.delimiter
-	})
-	return
+func (h *loggerConfiguration) FetchDelimiter() string {
+	h.rw.RLock()
+	defer h.rw.RUnlock()
+	return h.delimiter
 }
 
-func (h *loggerConfiguration) FetchAttrKeys(key AttrKey) (v string, exist bool) {
-	h.fetch(func(config *loggerConfiguration) {
-		v, exist = config.attrKeys[key]
-	})
-	return
+func (h *loggerConfiguration) FetchAttrKeys(key AttrKey) (string, bool) {
+	h.rw.RLock()
+	defer h.rw.RUnlock()
+	v, exist := h.attrKeys[key]
+	return v, exist
 }
 
 func (h *loggerConfiguration) update(logger func(config *loggerConfiguration)) *loggerConfiguration {
@@ -462,9 +462,7 @@ func (h *loggerConfiguration) WithLeveler(leveler Leveler) LoggerConfiguration {
 }
 
 func (h *loggerConfiguration) FetchTrackBeautify() bool {
-	var result bool
-	h.fetch(func(config *loggerConfiguration) {
-		result = config.trackBeautify
-	})
-	return result
+	h.rw.RLock()
+	defer h.rw.RUnlock()
+	return h.trackBeautify
 }

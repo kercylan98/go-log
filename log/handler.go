@@ -44,30 +44,31 @@ func (h *handler) Enabled(ctx context.Context, level slog.Level) bool {
 }
 
 func (h *handler) Handle(ctx context.Context, record slog.Record) error {
-	h.handleOptions = h.options.FetchCopy()
-	if !h.Enabled(ctx, h.handleOptions.FetchLeveler().Level()) {
+	// Create a local copy of options to avoid race conditions
+	options := h.options.FetchCopy()
+	if !h.Enabled(ctx, options.FetchLeveler().Level()) {
 		return nil
 	}
 
 	var builder = colorbuilder.NewBuilder()
 	defer builder.Reset()
 
-	h.formatTime(ctx, record, builder)
-	h.formatLevel(ctx, record, builder)
-	h.formatCaller(ctx, record, builder)
-	h.formatMessage(ctx, record, builder)
+	h.formatTime(ctx, record, builder, options)
+	h.formatLevel(ctx, record, builder, options)
+	h.formatCaller(ctx, record, builder, options)
+	h.formatMessage(ctx, record, builder, options)
 
 	// fixed attrs
 	num := record.NumAttrs()
 	fixedNum := len(h.attrs)
 	for i, attr := range h.attrs {
-		h.formatAttr(ctx, h.group, record.Level, attr, builder, num+fixedNum == i+1)
+		h.formatAttr(ctx, h.group, record.Level, attr, builder, num+fixedNum == i+1, options)
 	}
 
 	idx := 0
 	record.Attrs(func(attr slog.Attr) bool {
 		idx++
-		h.formatAttr(ctx, h.group, record.Level, attr, builder, num == idx)
+		h.formatAttr(ctx, h.group, record.Level, attr, builder, num == idx, options)
 		return true
 	})
 
@@ -76,7 +77,7 @@ func (h *handler) Handle(ctx context.Context, record slog.Record) error {
 		return err
 	}
 
-	_, err = h.handleOptions.FetchWriter().Write(recordBytes)
+	_, err = options.FetchWriter().Write(recordBytes)
 	return err
 }
 
@@ -100,17 +101,17 @@ func (h *handler) clone() *handler {
 	}
 }
 
-func (h *handler) formatTime(ctx context.Context, record slog.Record, builder *colorbuilder.Builder) {
-	h.loadAttrKey(builder, AttrKeyTime)
-	h.loadColor(builder, ColorTypeTime).
-		WriteString(record.Time.Format(h.handleOptions.FetchTimeLayout())).
+func (h *handler) formatTime(ctx context.Context, record slog.Record, builder *colorbuilder.Builder, options LoggerOptionsFetcher) {
+	h.loadAttrKeyWithOptions(builder, AttrKeyTime, options)
+	h.loadColorWithOptions(builder, ColorTypeTime, options).
+		WriteString(record.Time.Format(options.FetchTimeLayout())).
 		DisableColor().
 		Write(' ')
 }
 
-func (h *handler) formatLevel(ctx context.Context, record slog.Record, builder *colorbuilder.Builder) {
+func (h *handler) formatLevel(ctx context.Context, record slog.Record, builder *colorbuilder.Builder, options LoggerOptionsFetcher) {
 	var colorType ColorType
-	if h.handleOptions.FetchEnableColor() {
+	if options.FetchEnableColor() {
 		switch record.Level {
 		case slog.LevelDebug:
 			colorType = ColorTypeDebugLevel
@@ -122,19 +123,19 @@ func (h *handler) formatLevel(ctx context.Context, record slog.Record, builder *
 			colorType = ColorTypeErrorLevel
 		}
 	}
-	h.loadAttrKey(builder, AttrKeyLevel)
-	h.loadColor(builder, colorType).
-		WriteString(h.handleOptions.FetchLevelStr(record.Level)).
+	h.loadAttrKeyWithOptions(builder, AttrKeyLevel, options)
+	h.loadColorWithOptions(builder, colorType, options).
+		WriteString(options.FetchLevelStr(record.Level)).
 		DisableColor().
 		Write(' ')
 }
 
-func (h *handler) formatCaller(ctx context.Context, record slog.Record, builder *colorbuilder.Builder) {
-	if !h.handleOptions.FetchCaller() {
+func (h *handler) formatCaller(ctx context.Context, record slog.Record, builder *colorbuilder.Builder, options LoggerOptionsFetcher) {
+	if !options.FetchCaller() {
 		return
 	}
 	pcs := make([]uintptr, 1)
-	runtime.CallersFrames(pcs[:runtime.Callers(h.handleOptions.FetchCallerSkip(), pcs)])
+	runtime.CallersFrames(pcs[:runtime.Callers(options.FetchCallerSkip(), pcs)])
 	fs := runtime.CallersFrames(pcs)
 	f, _ := fs.Next()
 	if f.File == "" {
@@ -142,41 +143,41 @@ func (h *handler) formatCaller(ctx context.Context, record slog.Record, builder 
 	}
 
 	var file, line string
-	if callerFormatter := h.handleOptions.FetchCallerFormatter(); callerFormatter != nil {
+	if callerFormatter := options.FetchCallerFormatter(); callerFormatter != nil {
 		file, line = callerFormatter(f.File, f.Line)
 	} else {
 		file = filepath.Base(f.File)
 		line = convert.IntToString(f.Line)
 	}
 
-	h.loadAttrKey(builder, AttrKeyCaller)
-	h.loadColor(builder, ColorTypeCaller).
+	h.loadAttrKeyWithOptions(builder, AttrKeyCaller, options)
+	h.loadColorWithOptions(builder, ColorTypeCaller, options).
 		WriteString(file).
-		SetColor(h.handleOptions.FetchColorType(ColorTypeAttrDelimiter)).
+		SetColor(options.FetchColorType(ColorTypeAttrDelimiter)).
 		WriteString(":").
-		SetColor(h.handleOptions.FetchColorType(ColorTypeAttrValue)).
+		SetColor(options.FetchColorType(ColorTypeAttrValue)).
 		WriteString(line).
 		DisableColor().
 		Write(' ')
 }
 
-func (h *handler) formatMessage(ctx context.Context, record slog.Record, builder *colorbuilder.Builder) {
+func (h *handler) formatMessage(ctx context.Context, record slog.Record, builder *colorbuilder.Builder, options LoggerOptionsFetcher) {
 	if record.Message == "" {
 		return
 	}
 	var msg = record.Message
-	if messageFormatter := h.handleOptions.FetchMessageFormatter(); messageFormatter != nil {
+	if messageFormatter := options.FetchMessageFormatter(); messageFormatter != nil {
 		msg = messageFormatter(msg)
 	}
 
-	h.loadAttrKey(builder, AttrKeyMessage)
-	h.loadColor(builder, ColorTypeMessage).
+	h.loadAttrKeyWithOptions(builder, AttrKeyMessage, options)
+	h.loadColorWithOptions(builder, ColorTypeMessage, options).
 		WriteString(msg).
 		DisableColor().
 		Write(' ')
 }
 
-func (h *handler) formatAttr(ctx context.Context, group string, level slog.Level, attr slog.Attr, builder *colorbuilder.Builder, last bool) {
+func (h *handler) formatAttr(ctx context.Context, group string, level slog.Level, attr slog.Attr, builder *colorbuilder.Builder, last bool, options LoggerOptionsFetcher) {
 	var key = attr.Key
 	if group != "" {
 		key = group + "." + key
@@ -186,18 +187,18 @@ func (h *handler) formatAttr(ctx context.Context, group string, level slog.Level
 	case slog.KindGroup:
 		groupAttr := attr.Value.Group()
 		for _, a := range groupAttr {
-			h.formatAttr(ctx, key, level, a, builder, last)
+			h.formatAttr(ctx, key, level, a, builder, last, options)
 		}
 		return
 	default:
-		h.loadColor(builder, ColorTypeAttrKey)
+		h.loadColorWithOptions(builder, ColorTypeAttrKey, options)
 		switch v := attr.Value.Any().(type) {
 		case stackError, stackErrorTracks:
-			h.loadColor(builder, ColorTypeAttrErrorKey)
+			h.loadColorWithOptions(builder, ColorTypeAttrErrorKey, options)
 		case error:
-			if h.handleOptions.FetchErrTrackLevel(level) && !h.handleOptions.FetchTrackBeautify() {
+			if options.FetchErrTrackLevel(level) && !options.FetchTrackBeautify() {
 				pc := make([]uintptr, 10)
-				n := runtime.Callers(h.handleOptions.FetchCallerSkip()+3, pc)
+				n := runtime.Callers(options.FetchCallerSkip()+3, pc)
 				frames := runtime.CallersFrames(pc[:n])
 				var stacks = make(stackErrorTracks, 0, 10)
 				for {
@@ -208,22 +209,22 @@ func (h *handler) formatAttr(ctx context.Context, group string, level slog.Level
 					}
 				}
 				attr = slog.Group(attr.Key, slog.Any("info", stackError{v}), slog.Any("stack", stacks))
-				h.formatAttr(ctx, group, level, attr, builder, false)
+				h.formatAttr(ctx, group, level, attr, builder, false, options)
 				return
 			}
-			h.loadColor(builder, ColorTypeAttrErrorKey)
+			h.loadColorWithOptions(builder, ColorTypeAttrErrorKey, options)
 		}
 	}
 
 	builder.
 		WriteString(key).
-		SetColor(h.handleOptions.FetchColorType(ColorTypeAttrDelimiter)).
-		WriteString(h.handleOptions.FetchDelimiter())
-	h.formatAttrValue(ctx, level, key, attr, builder, last)
+		SetColor(options.FetchColorType(ColorTypeAttrDelimiter)).
+		WriteString(options.FetchDelimiter())
+	h.formatAttrValue(ctx, level, key, attr, builder, last, options)
 }
 
-func (h *handler) formatAttrValue(ctx context.Context, level slog.Level, fullKey string, attr slog.Attr, builder *colorbuilder.Builder, last bool) {
-	h.loadColor(builder, ColorTypeAttrValue)
+func (h *handler) formatAttrValue(ctx context.Context, level slog.Level, fullKey string, attr slog.Attr, builder *colorbuilder.Builder, last bool, options LoggerOptionsFetcher) {
+	h.loadColorWithOptions(builder, ColorTypeAttrValue, options)
 	defer builder.DisableColor()
 
 	switch attr.Value.Kind() {
@@ -244,23 +245,23 @@ func (h *handler) formatAttrValue(ctx context.Context, level slog.Level, fullKey
 	default:
 		switch v := attr.Value.Any().(type) {
 		case stackError:
-			h.loadColor(builder, ColorTypeAttrErrorKey)
+			h.loadColorWithOptions(builder, ColorTypeAttrErrorKey, options)
 			builder.WriteString(strconv.Quote(v.err.Error()))
 		case stackErrorTracks:
-			h.loadColor(builder, ColorTypeAttrErrorKey)
+			h.loadColorWithOptions(builder, ColorTypeAttrErrorKey, options)
 			builder.WriteString(strconv.Quote(fmt.Sprintf("%+v", attr.Value.Any())))
 		case error:
-			h.loadColor(builder, ColorTypeAttrErrorValue)
+			h.loadColorWithOptions(builder, ColorTypeAttrErrorValue, options)
 			builder.WriteString(strconv.Quote(v.Error()))
 
-			if h.handleOptions.FetchErrTrackLevel(level) && h.handleOptions.FetchTrackBeautify() {
+			if options.FetchErrTrackLevel(level) && options.FetchTrackBeautify() {
 				pc := make([]uintptr, 10)
-				n := runtime.Callers(h.handleOptions.FetchCallerSkip()+3, pc)
+				n := runtime.Callers(options.FetchCallerSkip()+3, pc)
 				frames := runtime.CallersFrames(pc[:n])
-				if h.handleOptions.FetchTrackBeautify() {
-					h.loadColor(builder, ColorTypeErrorTrackHeader).
+				if options.FetchTrackBeautify() {
+					h.loadColorWithOptions(builder, ColorTypeErrorTrackHeader, options).
 						WriteSprintfToEnd("\tError Track: [%s] >> %s", fullKey, v.Error())
-					h.loadColor(builder, ColorTypeErrorTrack)
+					h.loadColorWithOptions(builder, ColorTypeErrorTrack, options)
 					for {
 						builder.WriteToEnd('\n')
 						frame, more := frames.Next()
@@ -293,7 +294,7 @@ func (h *handler) formatAttrValue(ctx context.Context, level slog.Level, fullKey
 			} else {
 				lines := strings.Split(string(v), "\n")
 				builder.WriteString(fmt.Sprintf("lines(%d)", len(lines)))
-				if h.handleOptions.FetchTrackBeautify() {
+				if options.FetchTrackBeautify() {
 					for _, line := range lines {
 						builder.WriteToEnd('\n')
 						builder.WriteStringToEnd(line)
@@ -318,21 +319,43 @@ func (h *handler) formatAttrValue(ctx context.Context, level slog.Level, fullKey
 }
 
 func (h *handler) loadColor(builder *colorbuilder.Builder, t ColorType) *colorbuilder.Builder {
+	// For backward compatibility, use h.options if no specific options are provided
 	var c *color.Color
-	if h.handleOptions.FetchEnableColor() {
-		c = h.handleOptions.FetchColorType(t)
+	if h.options.FetchEnableColor() {
+		c = h.options.FetchColorType(t)
+	}
+	return builder.SetColor(c)
+}
+
+func (h *handler) loadColorWithOptions(builder *colorbuilder.Builder, t ColorType, options LoggerOptionsFetcher) *colorbuilder.Builder {
+	var c *color.Color
+	if options.FetchEnableColor() {
+		c = options.FetchColorType(t)
 	}
 	return builder.SetColor(c)
 }
 
 func (h *handler) loadAttrKey(builder *colorbuilder.Builder, key AttrKey) *colorbuilder.Builder {
-	v, exist := h.handleOptions.FetchAttrKeys(key)
+	// For backward compatibility, use h.options if no specific options are provided
+	v, exist := h.options.FetchAttrKeys(key)
 	if !exist {
 		return builder
 	}
 	return builder.
-		SetColor(h.handleOptions.FetchColorType(ColorTypeAttrKey)).
+		SetColor(h.options.FetchColorType(ColorTypeAttrKey)).
 		WriteString(v).
-		SetColor(h.handleOptions.FetchColorType(ColorTypeAttrDelimiter)).
-		WriteString(h.handleOptions.FetchDelimiter())
+		SetColor(h.options.FetchColorType(ColorTypeAttrDelimiter)).
+		WriteString(h.options.FetchDelimiter())
+}
+
+func (h *handler) loadAttrKeyWithOptions(builder *colorbuilder.Builder, key AttrKey, options LoggerOptionsFetcher) *colorbuilder.Builder {
+	v, exist := options.FetchAttrKeys(key)
+	if !exist {
+		return builder
+	}
+	return builder.
+		SetColor(options.FetchColorType(ColorTypeAttrKey)).
+		WriteString(v).
+		SetColor(options.FetchColorType(ColorTypeAttrDelimiter)).
+		WriteString(options.FetchDelimiter())
 }
