@@ -56,19 +56,20 @@ func (h *handler) Handle(ctx context.Context, record slog.Record) error {
 	h.formatTime(ctx, record, builder, options)
 	h.formatLevel(ctx, record, builder, options)
 	h.formatCaller(ctx, record, builder, options)
+	h.formatGroup(ctx, record, builder, options)
 	h.formatMessage(ctx, record, builder, options)
 
 	// fixed attrs
 	num := record.NumAttrs()
 	fixedNum := len(h.attrs)
 	for i, attr := range h.attrs {
-		h.formatAttr(ctx, h.group, record.Level, attr, builder, num+fixedNum == i+1, options)
+		h.formatAttr(ctx, record.Level, attr, builder, num+fixedNum == i+1, options)
 	}
 
 	idx := 0
 	record.Attrs(func(attr slog.Attr) bool {
 		idx++
-		h.formatAttr(ctx, h.group, record.Level, attr, builder, num == idx, options)
+		h.formatAttr(ctx, record.Level, attr, builder, num == idx, options)
 		return true
 	})
 
@@ -89,7 +90,11 @@ func (h *handler) WithAttrs(attrs []slog.Attr) slog.Handler {
 
 func (h *handler) WithGroup(name string) slog.Handler {
 	n := h.clone()
-	n.group = name
+	if h.group == "" {
+		n.group = name
+	} else {
+		n.group = fmt.Sprintf("%s.%s", h.group, name)
+	}
 	return n
 }
 
@@ -161,6 +166,18 @@ func (h *handler) formatCaller(ctx context.Context, record slog.Record, builder 
 		Write(' ')
 }
 
+func (h *handler) formatGroup(ctx context.Context, record slog.Record, builder *colorbuilder.Builder, options LoggerOptionsFetcher) {
+	if h.group == "" {
+		return
+	}
+
+	h.loadAttrKeyWithOptions(builder, AttrKeyMessage, options)
+	h.loadColorWithOptions(builder, ColorTypeMessage, options).
+		WriteString(h.group).
+		DisableColor().
+		WriteString(" ")
+}
+
 func (h *handler) formatMessage(ctx context.Context, record slog.Record, builder *colorbuilder.Builder, options LoggerOptionsFetcher) {
 	if record.Message == "" {
 		return
@@ -177,17 +194,13 @@ func (h *handler) formatMessage(ctx context.Context, record slog.Record, builder
 		Write(' ')
 }
 
-func (h *handler) formatAttr(ctx context.Context, group string, level slog.Level, attr slog.Attr, builder *colorbuilder.Builder, last bool, options LoggerOptionsFetcher) {
-	var key = attr.Key
-	if group != "" {
-		key = group + "." + key
-	}
+func (h *handler) formatAttr(ctx context.Context, level slog.Level, attr slog.Attr, builder *colorbuilder.Builder, last bool, options LoggerOptionsFetcher) {
 
 	switch attr.Value.Kind() {
 	case slog.KindGroup:
 		groupAttr := attr.Value.Group()
 		for _, a := range groupAttr {
-			h.formatAttr(ctx, key, level, a, builder, last, options)
+			h.formatAttr(ctx, level, a, builder, last, options)
 		}
 		return
 	default:
@@ -209,7 +222,7 @@ func (h *handler) formatAttr(ctx context.Context, group string, level slog.Level
 					}
 				}
 				attr = slog.Group(attr.Key, slog.Any("info", stackError{v}), slog.Any("stack", stacks))
-				h.formatAttr(ctx, group, level, attr, builder, false, options)
+				h.formatAttr(ctx, level, attr, builder, false, options)
 				return
 			}
 			h.loadColorWithOptions(builder, ColorTypeAttrErrorKey, options)
@@ -217,10 +230,10 @@ func (h *handler) formatAttr(ctx context.Context, group string, level slog.Level
 	}
 
 	builder.
-		WriteString(key).
+		WriteString(attr.Key).
 		SetColor(options.FetchColorType(ColorTypeAttrDelimiter)).
 		WriteString(options.FetchDelimiter())
-	h.formatAttrValue(ctx, level, key, attr, builder, last, options)
+	h.formatAttrValue(ctx, level, attr.Key, attr, builder, last, options)
 }
 
 func (h *handler) formatAttrValue(ctx context.Context, level slog.Level, fullKey string, attr slog.Attr, builder *colorbuilder.Builder, last bool, options LoggerOptionsFetcher) {
